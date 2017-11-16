@@ -12,18 +12,15 @@ import CoreGraphics
 
 class ViewController: UIViewController {
 	
-	typealias TouchData = (location: (start: CGPoint, last: CGPoint), label: SKLabelNode)
+	typealias TouchData = (location: (start: CGPoint, last: CGPoint), moved: Bool)
 	
 	// SpriteKit scene displaying touch visualisations
 	let scene = SKScene()
 	
+	let forceTapIndicator = TouchIndicator()
+	
 	// Dictionary holding the first and last location for each active touch
 	var touchHistory = [UITouch:TouchData]()
-	
-	// Font name for labels
-	let labelFontName = "ChalkboardSE-Bold"
-	let labelFontSize:CGFloat = 24
-	let labelFontMaxSize:CGFloat = 48
 	
 	// Duration of animations
 	let actionChangeInterval:TimeInterval = 0.7
@@ -43,6 +40,8 @@ class ViewController: UIViewController {
 	let touchStartColor = UIColor.red
 	let touchEndColor = UIColor.lightGray
 	
+	private let indicatorsPadding:CGFloat = 16.0
+	
 	// MARK: - Initialization
 	
 	override func viewDidLoad() {
@@ -53,37 +52,29 @@ class ViewController: UIViewController {
 		}
 		view.isMultipleTouchEnabled = true
 		scene.backgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1.0)
+		
+		forceTapIndicator.isHidden = true
+		forceTapIndicator.position = CGPoint(x: (scene.size.width - forceTapIndicator.frame.size.width) * 0.5,
+											 y: scene.size.height - forceTapIndicator.frame.size.height - 36.0)
+		forceTapIndicator.anchor = CGPoint(x: 0.5, y:1.0)
+		forceTapIndicator.zPosition = 100
+		forceTapIndicator.sizeAtMaxForce = CGSize(width: scene.frame.width*0.7, height: scene.frame.width*0.7)
+		scene.addChild(forceTapIndicator)
 	}
 	
 	// MARK: - Private methods
 	
 	private func startHistory(ofTouch touch: UITouch, inScene scene: SKScene) {
 		if touchHistory[touch] == nil {
-			let labelNode = SKLabelNode(fontNamed: labelFontName)
-			labelNode.text = "0"
-			labelNode.fontSize = 12
-			labelNode.fontColor = touchStartColor
-			labelNode.isHidden = true
-			labelNode.zPosition = 100
-			scene.addChild(labelNode)
-			
 			let location = touch.location(in: scene)
-			touchHistory[touch] = (location: (start:location, last:location), label: labelNode)
+			touchHistory[touch] = (location: (start:location, last:location), moved: false)
 		}
 	}
 	
 	private func endHistory(ofTouch touch: UITouch) {
-		if let touchItem = touchHistory[touch] {
-			touchItem.label.removeFromParent()
+		if touchHistory[touch] != nil {
 			touchHistory.removeValue(forKey: touch)
 		}
-	}
-	
-	private func set(position: CGPoint, andForce force: CGFloat, ofLabel label: SKLabelNode) {
-		label.fontSize = labelFontSize + (labelFontMaxSize - labelFontSize) * force
-		label.text = String(format: "%.0lf", force * 10.0)
-		label.position = CGPoint(x: position.x, y: position.y + 36.0)
-		label.isHidden = false
 	}
 	
 	private func drawLine(from: CGPoint, to: CGPoint, startWidth: CGFloat, endWidth: CGFloat) {
@@ -131,15 +122,14 @@ class ViewController: UIViewController {
 			// Get location of the touch
 			let location = touch.location(in: scene)
 			// Check if we have already cached this touch
-			if let touchItem = touchHistory[touch] {
-				// Put label indicating touch force
-				set(position: location, andForce: touch.force / touch.maximumPossibleForce, ofLabel: touchItem.label)
+			if let touchData = touchHistory[touch] {
 				// Touch cached, check the distance
-				let distance = hypot(location.x - touchItem.location.last.x, location.y - touchItem.location.last.y)
+				let distance = hypot(location.x - touchData.location.last.x, location.y - touchData.location.last.y)
 				if distance > minimumDistanceForMovement {
 					// If distance is long enough, draw a line indicating this touch movement
-					drawLine(from: touchItem.location.last, to: location, startWidth: lineStartSize, endWidth: lineEndSize)
+					drawLine(from: touchData.location.last, to: location, startWidth: lineStartSize, endWidth: lineEndSize)
 					// Remember the last position
+					touchHistory[touch]?.moved = true
 					touchHistory[touch]?.location.last = location
 				}
 			}
@@ -148,6 +138,25 @@ class ViewController: UIViewController {
 				startHistory(ofTouch: touch, inScene: scene)
 			}
 		}
+		
+		// Display touch indicator if force tap detected
+		var maxForcedTouch: UITouch? = nil
+		for (touch, touchData) in touchHistory where !touchData.moved {
+			if (maxForcedTouch == nil) || (touch.force > maxForcedTouch!.force) {
+				maxForcedTouch = touch
+			}
+		}
+		if let touch = maxForcedTouch {
+			let force = touch.force / touch.maximumPossibleForce
+			if force >= 0.1 {
+				forceTapIndicator.touch = touch
+				forceTapIndicator.force = force
+				forceTapIndicator.isHidden = false
+			}
+		}
+		else {
+			forceTapIndicator.isHidden = true
+		}
 	}
 	
 	override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -155,16 +164,20 @@ class ViewController: UIViewController {
 			// Get location of the touch
 			let location = touch.location(in: scene)
 			// Check if we have already cached this touch
-			if let touchItem = touchHistory[touch] {
+			if let touchData = touchHistory[touch] {
 				// Touch cached, check the distance
-				let distance = hypot(location.x - touchItem.location.start.x, location.y - touchItem.location.start.y)
+				let distance = hypot(location.x - touchData.location.start.x, location.y - touchData.location.start.y)
 				if distance < minimumDistanceForMovement {
 					// If distance is short enough, this is a tap only (not touch movement)
 					// Draw a big (and shrinking) dot
-					drawLine(from: touchItem.location.start, to: location, startWidth: tapDotStartSize, endWidth: tapDotEndSize)
+					drawLine(from: touchData.location.start, to: location, startWidth: tapDotStartSize, endWidth: tapDotEndSize)
 				}
 			}
 			endHistory(ofTouch: touch)
+			if forceTapIndicator.touch == touch {
+				forceTapIndicator.touch = nil
+				forceTapIndicator.isHidden = true
+			}
 		}
 	}
 	
