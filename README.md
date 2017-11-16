@@ -10,4 +10,5 @@ It visualises only basic events at the moment. Gestures are planned to be added 
 
 Events:
 - taps
+- 3D touch
 - touch movements (single- and multitouches)
