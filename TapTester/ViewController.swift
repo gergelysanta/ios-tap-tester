@@ -18,6 +18,12 @@ class ViewController: UIViewController {
 	let scene = SKScene()
 	
 	let forceTapIndicator = TouchIndicator()
+	let gestureLine = SKShapeNode()
+	let gestureLabel = SKLabelNode()
+	let gestureLabelOutline = SKLabelNode()
+	
+	let gestureFontName = "Arial"
+	let gestureFontSize:CGFloat = 20.0
 	
 	// Dictionary holding the first and last location for each active touch
 	var touchHistory = [UITouch:TouchData]()
@@ -39,7 +45,9 @@ class ViewController: UIViewController {
 	// Starting and ending color of touch lines / tap dots
 	let touchStartColor = UIColor.red
 	let touchEndColor = UIColor.lightGray
-	
+	let gestureLineColor = UIColor(red: 0.444, green: 0.803, blue: 0.19, alpha: 1.0)
+	let gestureOutlineColor = UIColor(red: 0.443, green: 0.627, blue: 0.553, alpha: 1.0)
+
 	private let indicatorsPadding:CGFloat = 16.0
 	
 	// MARK: - Initialization
@@ -60,6 +68,25 @@ class ViewController: UIViewController {
 		forceTapIndicator.zPosition = 100
 		forceTapIndicator.sizeAtMaxForce = CGSize(width: scene.frame.width*0.7, height: scene.frame.width*0.7)
 		scene.addChild(forceTapIndicator)
+		
+		gestureLine.zPosition = 97
+		gestureLine.strokeColor = gestureLineColor
+		gestureLine.isHidden = true
+		scene.addChild(gestureLine)
+		
+		gestureLabel.zPosition = 99
+		gestureLabel.fontName = gestureFontName
+		gestureLabel.fontSize = gestureFontSize
+		gestureLabel.fontColor = gestureLineColor
+		gestureLabel.isHidden = true
+		scene.addChild(gestureLabel)
+		
+		gestureLabelOutline.zPosition = 98
+		gestureLabelOutline.fontName = gestureFontName
+		gestureLabelOutline.fontSize = gestureFontSize
+		gestureLabelOutline.fontColor = gestureOutlineColor
+		gestureLabelOutline.isHidden = true
+		scene.addChild(gestureLabelOutline)
 	}
 	
 	// MARK: - Private methods
@@ -108,6 +135,61 @@ class ViewController: UIViewController {
 		scene.addChild(line)
 	}
 	
+	private func updateGestureIndicator(label:String, from: CGPoint, to: CGPoint, width: CGFloat) {
+		var showOutline = true
+		
+		// Set new line
+		let path = CGMutablePath()
+		path.move(to: from)
+		path.addLine(to: to)
+		gestureLine.path = path
+		gestureLine.lineCap = .round
+		gestureLine.lineWidth = width
+		
+		// Set and rotate label
+		if #available(iOS 11, *) {
+			if let font = UIFont(name: "Arial", size: gestureFontSize) {
+				gestureLabel.attributedText = NSAttributedString(string: label,
+																 attributes: [.font: font,
+																			  .baselineOffset: 3.0,
+																			  .foregroundColor: gestureLineColor
+					])
+				gestureLabelOutline.attributedText = NSAttributedString(string: label,
+																		attributes: [.font: font,
+																					 .baselineOffset: 3.0,
+																					 .strokeColor: gestureOutlineColor,
+																					 .strokeWidth: 6.0
+					])
+			}
+			else {
+				gestureLabel.text = label
+				showOutline = false
+			}
+		} else {
+			gestureLabel.text = label
+			showOutline = false
+		}
+		gestureLabel.position = CGPoint(x: from.x + (to.x - from.x)/2,
+										y: from.y + (to.y - from.y)/2)
+		gestureLabel.zRotation = atan((to.y - from.y) / (to.x - from.x))
+		
+		gestureLabelOutline.text = label
+		gestureLabelOutline.position = gestureLabel.position
+		gestureLabelOutline.zRotation = gestureLabel.zRotation
+		
+		// Show both line and label
+		gestureLine.isHidden = false
+		gestureLabel.isHidden = false
+		gestureLabelOutline.isHidden = showOutline ? false : true
+	}
+	
+	private func hideGestureIndicator() {
+		// Hide both line and label
+		gestureLine.isHidden = true
+		gestureLabel.isHidden = true
+		gestureLabelOutline.isHidden = true
+	}
+
 	// MARK: - Touches
 	
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -115,6 +197,8 @@ class ViewController: UIViewController {
 			// Cache touch
 			startHistory(ofTouch: touch, inScene: scene)
 		}
+		hideGestureIndicator()
+		
 	}
 	
 	override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -179,10 +263,39 @@ class ViewController: UIViewController {
 				forceTapIndicator.isHidden = true
 			}
 		}
+		if touches.count < 2 {
+			hideGestureIndicator()
+		}
 	}
 	
 	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
 		touchesEnded(touches, with: event)
 	}
+	
+	// MARK: - Gestures
+	
+	@IBAction func pinchGestureAction(_ sender: UIPinchGestureRecognizer) {
+		if sender.numberOfTouches >= 2 {
+			updateGestureIndicator(label: "Pinch",
+								   from: scene.convertPoint(fromView: sender.location(ofTouch: 0, in: view)),
+								   to: scene.convertPoint(fromView: sender.location(ofTouch: 1, in: view)),
+								   width: 3.0)
+		}
+	}
+	
+	@IBAction func rotateGestureAction(_ sender: UIRotationGestureRecognizer) {
+		if sender.numberOfTouches >= 2 {
+			updateGestureIndicator(label: "Rotate",
+								   from: scene.convertPoint(fromView: sender.location(ofTouch: 0, in: view)),
+								   to: scene.convertPoint(fromView: sender.location(ofTouch: 1, in: view)),
+								   width: 3.0)
+		}
+	}
+	
+}
+
+extension ViewController: UIGestureRecognizerDelegate {
+	
+	
 	
 }
