@@ -12,3 +12,6 @@ Events:
 - taps
 - 3D touch
 - touch movements (single- and multitouches)
+- touch gestures:
+  - pinch
+  - rotate
